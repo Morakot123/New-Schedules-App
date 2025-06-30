@@ -1,117 +1,174 @@
+// prisma/schema.prisma
+
+// Generator สำหรับ Prisma Client - ใช้สร้างไคลเอนต์ TypeScript/JavaScript สำหรับการติดต่อกับฐานข้อมูล
 generator client {
   provider = "prisma-client-js"
 }
 
+// การกำหนดค่า Datasource - ระบุประเภทฐานข้อมูลและ URL การเชื่อมต่อ
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql" // บอก Prisma ว่าจะเชื่อมต่อกับฐานข้อมูล PostgreSQL
+  url      = env("DATABASE_URL") // URL การเชื่อมต่อดึงมาจากตัวแปรสภาพแวดล้อม DATABASE_URL
 }
 
-// User model with a one-to-one relationship to Teacher
+// โมเดล User: แสดงถึงผู้ใช้ในแอปพลิเคชันของคุณ รวมถึงรายละเอียดการยืนยันตัวตน
+// มีความสัมพันธ์แบบ One-to-one กับ Teacher และ One-to-many กับ Schedules, Accounts และ Sessions
 model User {
-  id          Int        @id @default(autoincrement())
-  name        String
-  email       String     @unique
-  password    String
-  role        String     @default("teacher")
+  id          Int      @id @default(autoincrement()) // ตัวระบุเฉพาะสำหรับผู้ใช้, เพิ่มขึ้นอัตโนมัติ
+  name        String   // ชื่อผู้ใช้
+  email       String   @unique // อีเมลผู้ใช้, ต้องไม่ซ้ำกัน
+  password    String   // รหัสผ่านผู้ใช้ (ควรเป็นแฮชในแอปพลิเคชันจริง)
+  role        String   @default("teacher") // บทบาทผู้ใช้, ค่าเริ่มต้นคือ "teacher"
+  createdAt   DateTime @default(now()) // วันที่สร้างบันทึก
+  updatedAt   DateTime @updatedAt // วันที่อัปเดตล่าสุด
 
-  // One-to-one relationship: a User can be linked to at most one Teacher profile
-  teacher     Teacher?   @relation("UserToTeacher")
-  
-  schedules   Schedule[]
-  accounts    Account[]
-  sessions    Session[]
+  // ความสัมพันธ์:
+  teacher     Teacher?  @relation("UserToTeacher") // ความสัมพันธ์แบบ One-to-one ที่เป็นทางเลือกกับโปรไฟล์ครู
+  schedules   Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่ผู้ใช้สร้าง
+  accounts    Account[] // ความสัมพันธ์แบบ One-to-many กับบัญชีผู้ใช้ (สำหรับ NextAuth)
+  sessions    Session[] // ความสัมพันธ์แบบ One-to-many กับเซสชันผู้ใช้ (สำหรับ NextAuth)
+  students    Student[] // ความสัมพันธ์แบบ One-to-many กับนักเรียนที่เกี่ยวข้องกับผู้ใช้นี้
 }
 
+// โมเดล Account: ใช้โดย NextAuth เพื่อเก็บรายละเอียดเกี่ยวกับบัญชีภายนอกที่เชื่อมโยงของผู้ใช้ (เช่น Google, GitHub)
 model Account {
-  id                  Int       @id @default(autoincrement())
-  userId              Int
-  type                String
-  provider            String
-  providerAccountId   String
-  refresh_token       String?
-  access_token        String?
-  expires_at          Int?
-  token_type          String?
-  scope               String?
-  id_token            String?
-  session_state       String?
+  id                Int      @id @default(autoincrement())
+  userId            Int      // Foreign key ที่เชื่อมโยงกับโมเดล User
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
 
-  user User @relation(fields: [userId], references: [id])
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับโมเดล User; หาก User ถูกลบ, Accounts ที่เกี่ยวข้องก็จะถูกลบด้วย
 
-  @@unique([provider, providerAccountId])
+  @@unique([provider, providerAccountId]) // รับประกันความไม่ซ้ำกันของ provider และ providerAccountId
 }
 
+// โมเดล Session: ใช้โดย NextAuth เพื่อจัดการเซสชันผู้ใช้
 model Session {
   id           Int      @id @default(autoincrement())
-  sessionToken String   @unique
-  userId       Int
-  expires      DateTime
+  sessionToken String   @unique // โทเค็นเฉพาะสำหรับเซสชัน
+  userId       Int      // Foreign key ที่เชื่อมโยงกับโมเดล User
+  expires      DateTime // วันที่หมดอายุของเซสชัน
 
-  user User @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับโมเดล User; การลบแบบ Cascade ทำให้เซสชันถูกลบพร้อมผู้ใช้
 }
 
+// โมเดล VerificationToken: ใช้โดย NextAuth สำหรับการยืนยันอีเมลหรือลิงก์ Magic Link
 model VerificationToken {
   identifier String
-  token      String   @unique
-  expires    DateTime
+  token      String   @unique // โทเค็นเฉพาะสำหรับการยืนยัน
+  expires    DateTime // วันที่หมดอายุของโทเค็น
 
-  @@unique([identifier, token])
+  @@unique([identifier, token]) // รับประกันความไม่ซ้ำกันของ identifier และ token
 }
 
-// Teacher model with a unique one-to-one relationship to User
+// โมเดล Teacher: แสดงถึงโปรไฟล์ครู, เชื่อมโยงกับ User
 model Teacher {
-  id          Int        @id @default(autoincrement())
-  name        String     @unique // Enforce unique names for teachers
-  userId      Int        @unique // Enforce one User per Teacher
-  user        User       @relation("UserToTeacher", fields: [userId], references: [id])
-  schedules   Schedule[]
+  id        Int        @id @default(autoincrement())
+  name      String     @unique // ชื่อเฉพาะสำหรับครูแต่ละคน
+  userId    Int        @unique // Foreign key ที่เชื่อมโยงกับ User ที่ไม่ซ้ำกัน; รับประกัน User หนึ่งคนต่อโปรไฟล์ Teacher หนึ่งโปรไฟล์
+  user      User       @relation("UserToTeacher", fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับโมเดล User; การลบแบบ Cascade
+  schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่ครูสอน
+  bookings  Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่ทำโดยครูคนนี้
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt // วันที่อัปเดตล่าสุด
 }
 
+// โมเดล Student: แสดงถึงนักเรียน
 model Student {
-  id           Int          @id @default(autoincrement())
-  name         String
-  classGroupId Int?
-  classGroup   ClassGroup?  @relation(fields: [classGroupId], references: [id])
-  createdAt    DateTime     @default(now())
+  id          Int         @id @default(autoincrement())
+  name        String
+  userId      Int         @unique // Foreign key ที่เชื่อมโยงกับ User
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ User; การลบแบบ Cascade
+  classGroupId Int?       // Foreign key ที่เป็นทางเลือกไปยัง ClassGroup
+  classGroup  ClassGroup? @relation(fields: [classGroupId], references: [id]) // การเชื่อมโยงที่เป็นทางเลือกไปยัง ClassGroup
+  createdAt   DateTime    @default(now()) // วันที่สร้างบันทึกนักเรียน
+  updatedAt   DateTime    @updatedAt // วันที่อัปเดตล่าสุด
 }
 
-// Lab model with unique names
+// โมเดล Lab: แสดงถึงห้องปฏิบัติการ
 model Lab {
   id        Int        @id @default(autoincrement())
-  name      String     @unique // Enforce unique names for labs
-  schedules Schedule[]
+  name      String     @unique // ชื่อเฉพาะสำหรับแต่ละห้องปฏิบัติการ
+  schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่จัดในห้องปฏิบัติการนี้
+  bookings  Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่ทำในห้องนี้
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt // วันที่อัปเดตล่าสุด
 }
 
-// ClassGroup model with unique names
+// โมเดล ClassGroup: แสดงถึงกลุ่มนักเรียน (เช่น ชั้นเรียน)
 model ClassGroup {
   id        Int        @id @default(autoincrement())
-  name      String     @unique // Enforce unique names for class groups
-  students  Student[]
-  schedules Schedule[]
+  name      String     @unique // ชื่อเฉพาะสำหรับแต่ละกลุ่มชั้นเรียน
+  students  Student[]  // ความสัมพันธ์แบบ One-to-many กับนักเรียนในกลุ่มนี้
+  schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนสำหรับกลุ่มนี้
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt // วันที่อัปเดตล่าสุด
 }
 
-// Schedule model with required relations
+// โมเดล Grade: แสดงถึงระดับหรือชั้นเรียน (เช่น ม.1, ป.1)
+model Grade {
+  id        Int      @id @default(autoincrement()) // ใช้ Int @id @default(autoincrement()) เพื่อให้ตรงกับโมเดลอื่นๆ
+  name      String   @unique // ชื่อระดับชั้น, ต้องไม่ซ้ำกัน (เช่น "ม.1")
+  bookings  Booking[] // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่เกี่ยวกับระดับชั้นนี้
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// โมเดล TimeSlot: แสดงถึงช่วงเวลา (เช่น "09:00-10:00")
+model TimeSlot {
+  id        Int      @id @default(autoincrement())
+  time      String   @unique // สตริงเวลา, เช่น "09:00-10:00"
+  bookings  Booking[] // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่เกี่ยวกับช่วงเวลานี้
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// โมเดล Booking: แสดงถึงการจองตารางเรียน
+model Booking {
+  id        Int      @id @default(autoincrement())
+  teacherId Int      // Foreign key ไปยัง Teacher
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  gradeId   Int      // Foreign key ไปยัง Grade
+  grade     Grade    @relation(fields: [gradeId], references: [id])
+  roomId    Int      // Foreign key ไปยัง Lab (ซึ่งใช้สำหรับ Rooms ของคุณ)
+  room      Lab      @relation(fields: [roomId], references: [id])
+  timeSlotId Int     // Foreign key ไปยัง TimeSlot
+  timeSlot  TimeSlot @relation(fields: [timeSlotId], references: [id])
+
+  date      String   // วันที่ของการจอง (เช่น "YYYY-MM-DD")
+  status    String   @default("pending") // สถานะการจอง เช่น "pending", "approved", "rejected"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// โมเดล Schedule: แสดงถึงตารางเรียน (ดูเหมือนจะเป็นตารางเรียนแยกต่างหาก ไม่ใช่การจอง)
+// ความสัมพันธ์ทั้งหมด (teacher, lab, classGroup, user) จำเป็นสำหรับตารางเรียน
 model Schedule {
   id           Int        @id @default(autoincrement())
-  subject      String
-  time         String
-  day          String
+  subject      String     // วิชาของตารางเรียน
+  time         String     // เวลาของตารางเรียน (ฟิลด์ 'time' นี้เป็นสตริงโดยตรง ไม่ใช่ foreign key ไปยังโมเดล TimeSlot)
+  day          String     // วันของตารางเรียน
 
-  // These should be required if a schedule must have them.
-  // Changed to required (Int) for stronger data integrity.
-  teacherId    Int
-  teacher      Teacher    @relation(fields: [teacherId], references: [id])
+  teacherId    Int        // Foreign key ไปยัง Teacher.
+  teacher      Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ Teacher; การลบแบบ Cascade.
 
-  labId        Int
-  lab          Lab        @relation(fields: [labId], references: [id])
+  labId        Int        // Foreign key ไปยัง Lab.
+  lab          Lab        @relation(fields: [labId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ Lab; การลบแบบ Cascade.
 
-  classGroupId Int        // Assume every schedule is for a class group
-  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id])
+  classGroupId Int        // Foreign key ไปยัง ClassGroup.
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ ClassGroup; การลบแบบ Cascade.
 
-  // A schedule must be associated with a user who created it
-  userId       Int
-  user         User       @relation(fields: [userId], references: [id])
+  userId       Int        // Foreign key ไปยัง User (ผู้ใช้ที่สร้าง/เป็นเจ้าของตารางเรียนนี้).
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ User; การลบแบบ Cascade.
 
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime   @default(now()) // วันที่สร้างตารางเรียน.
 }

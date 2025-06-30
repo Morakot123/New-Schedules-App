@@ -1,38 +1,42 @@
 // lib/prisma.ts
 
-import { PrismaClient } from '@prisma/client'
-import { logQueryMiddleware } from './middleware/logQuery'
+// Import PrismaClient from the Prisma Client library.
+import { PrismaClient } from '@prisma/client';
+// Import the custom query logging middleware.
+import { logQueryMiddleware } from './middleware/logQuery'; // Adjust path if your middleware is located elsewhere.
 
-/**
- * Global variable to hold the PrismaClient instance in development.
- * This prevents creating new instances on every hot-reload, which can
- * exhaust database connections.
- */
+// This declaration is necessary for Next.js Hot Module Replacement (HMR) in development mode.
+// It prevents multiple PrismaClient instances from being created during code refreshes,
+// which can lead to connection pool exhaustion errors.
 declare global {
-    // eslint-disable-next-line no-var
-    var prisma: PrismaClient | undefined
+    // Declares a global variable named 'prisma' which can hold a PrismaClient instance or be undefined.
+    var prisma: PrismaClient | undefined;
 }
 
-const prisma: PrismaClient =
-    global.prisma ??
-    new PrismaClient({
-        // Log queries, warnings, and errors for debugging in development.
-        log:
-            process.env.NODE_ENV === 'development'
-                ? ['query', 'info', 'warn', 'error']
-                : ['error'], // In production, only log errors to keep logs clean.
-    })
+// Variable to hold the PrismaClient instance.
+let prisma: PrismaClient;
 
-// ✅ Attach query logging middleware in development
-// This provides performance insights without cluttering production logs.
-if (process.env.NODE_ENV === 'development') {
-    prisma.$use(logQueryMiddleware)
+// Checks if the application is running in production or development mode.
+if (process.env.NODE_ENV === 'production') {
+    // In production, a new PrismaClient instance is created.
+    // This approach is generally suitable for serverless environments like Vercel,
+    // where each function invocation might be a fresh instance.
+    prisma = new PrismaClient();
+    // Optional: Enable the logQueryMiddleware in production if detailed logging is needed.
+    // Be cautious as extensive logging can impact performance.
+    // prisma.$use(logQueryMiddleware);
+} else {
+    // In development, we use a global variable to persist the PrismaClient instance
+    // across HMR updates.
+    if (!global.prisma) {
+        // If the global instance does not exist, create a new one.
+        global.prisma = new PrismaClient();
+        // Enable the logQueryMiddleware in development to see detailed query logs in your console.
+        global.prisma.$use(logQueryMiddleware);
+    }
+    // Assign the global instance to the local 'prisma' variable.
+    prisma = global.prisma;
 }
 
-// In development, store the PrismaClient instance on the global object
-// for hot-reloading purposes.
-if (process.env.NODE_ENV !== 'production') {
-    global.prisma = prisma
-}
-
-export default prisma
+// Exports the PrismaClient instance for use throughout the application.
+export default prisma;

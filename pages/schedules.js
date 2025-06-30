@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react'; // NEW: Import useSession
+import { useSession } from 'next-auth/react'; // Import useSession
 import BookingForm from '../components/BookingForm';
 
 export default function LabSchedulePage() {
-    const { data: session, status } = useSession(); // Get session status
+    const { data: session, status: sessionStatus } = useSession(); // Get session status
     const [bookings, setBookings] = useState([]);
     const [teachers, setTeachers] = useState([]);
     const [grades, setGrades] = useState([]);
     const [timeSlots, setTimeSlots] = useState([]);
-    const [rooms, setRooms] = useState([]); // NEW: State for rooms
-    const [selectedRoomId, setSelectedRoomId] = useState(''); // NEW: State for selected room
+    const [rooms, setRooms] = useState([]);
+    const [selectedRoomId, setSelectedRoomId] = useState('');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null); // NEW: State to store general errors from API fetches
 
     // Define the days to display (Today + next 6 days)
     const today = new Date();
@@ -24,60 +25,96 @@ export default function LabSchedulePage() {
     const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
     const fetchData = async () => {
+        setLoading(true);
+        setError(null); // Clear any previous errors
+
         try {
-            setLoading(true);
-            const [bookingsRes, teachersRes, gradesRes, timeSlotsRes, roomsRes] = await Promise.all([
+            // Use Promise.allSettled to allow individual fetches to fail without stopping others
+            const [bookingsRes, teachersRes, gradesRes, timeSlotsRes, roomsRes] = await Promise.allSettled([
                 fetch('/api/bookings'),
                 fetch('/api/teachers'),
                 fetch('/api/grades'),
                 fetch('/api/time-slots'),
-                fetch('/api/rooms'), // NEW: Fetch rooms data
+                fetch('/api/rooms'),
             ]);
 
-            // --- START DEBUGGING BLOCK ---
-            // This block helps us see which API calls are failing
-            // If any response is not 'ok', throw an error to see which one
-            if (!bookingsRes.ok) throw new Error(`Bookings API failed: ${bookingsRes.status}`);
-            if (!teachersRes.ok) throw new Error(`Teachers API failed: ${teachersRes.status}`);
-            if (!gradesRes.ok) throw new Error(`Grades API failed: ${gradesRes.status}`);
-            if (!timeSlotsRes.ok) throw new Error(`Time Slots API failed: ${timeSlotsRes.status}`);
-            if (!roomsRes.ok) throw new Error(`Rooms API failed: ${roomsRes.status}`);
-            // --- END DEBUGGING BLOCK ---
+            // Helper function to process response and check for Array
+            const processResponse = async (responsePromise, fallbackValue = []) => {
+                if (responsePromise.status === 'fulfilled') {
+                    const response = responsePromise.value;
+                    if (response.ok) {
+                        const data = await response.json();
+                        // IMPORTANT: Validate if the data is an array
+                        if (Array.isArray(data)) {
+                            return data;
+                        } else {
+                            console.error(`API returned non-array data from ${response.url}:`, data);
+                            throw new Error(`Invalid data format from ${response.url}`);
+                        }
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(`API failed (${response.url}): ${response.status} - ${errorData.message || errorData.error || 'Unknown error'}`);
+                    }
+                } else {
+                    // This handles network errors or errors thrown during fetch itself
+                    throw new Error(`Network or unexpected error fetching ${responsePromise.reason.message}`);
+                }
+            };
 
-            const [bookingsData, teachersData, gradesData, timeSlotsData, roomsData] = await Promise.all([
-                bookingsRes.json(),
-                teachersRes.json(),
-                gradesRes.json(),
-                timeSlotsRes.json(),
-                roomsRes.json(),
+            const [
+                bookingsData,
+                teachersData,
+                gradesData,
+                timeSlotsData,
+                roomsData
+            ] = await Promise.all([
+                processResponse(bookingsRes, []),
+                processResponse(teachersRes, []),
+                processResponse(gradesRes, []),
+                processResponse(timeSlotsRes, []),
+                processResponse(roomsRes, []),
             ]);
 
             setBookings(bookingsData);
             setTeachers(teachersData);
             setGrades(gradesData);
+            // Ensure timeSlotsData is sorted after fetching
             setTimeSlots(timeSlotsData.sort((a, b) => a.time.localeCompare(b.time)));
             setRooms(roomsData);
+
             if (roomsData.length > 0 && !selectedRoomId) {
                 setSelectedRoomId(roomsData[0].id); // Set default selected room
             }
-        } catch (error) {
-            // This will now show you which API call failed
-            console.error('Error fetching data:', error);
+        } catch (err) {
+            console.error('Error fetching data for Lab Schedule:', err);
+            setError(err.message || 'An error occurred while loading schedule data.'); // Set the error message
+            // Ensure all states are reset to empty arrays on error to prevent .map() issues
+            setBookings([]);
+            setTeachers([]);
+            setGrades([]);
+            setTimeSlots([]);
+            setRooms([]);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        // Only fetch data if session status is not loading, to avoid unnecessary fetches
+        // and ensure context like session is available if needed by APIs.
+        if (sessionStatus !== 'loading') {
+            fetchData();
+        }
+    }, [sessionStatus]); // Depend on sessionStatus
 
     const formatDate = (date) => date.toISOString().split('T')[0];
 
     // Function to get booking info for a specific date, time slot, and room
     const getBookingInfo = (date, time, roomId) => {
         const formattedDate = formatDate(date);
-        // NEW: Only show 'approved' bookings
+        // Ensure bookings is an array before calling find
+        if (!Array.isArray(bookings)) return null;
+
         return bookings.find(
             (booking) => booking.date === formattedDate && booking.timeSlot === time && booking.roomId === roomId && booking.status === 'approved'
         );
@@ -86,12 +123,24 @@ export default function LabSchedulePage() {
     // Find the selected room's name for display
     const selectedRoomName = rooms.find(room => room.id === selectedRoomId)?.name || 'กำลังโหลด...';
 
+    // Show loading state for initial session check
+    if (sessionStatus === 'loading') {
+        return <div className="text-center p-10 dark:text-gray-300">กำลังโหลด...</div>;
+    }
+
     return (
         <div className="min-h-[calc(100vh-64px)] p-8 bg-gray-100 dark:bg-gray-800 dark:text-white transition-colors duration-300">
             <div className="max-w-7xl mx-auto">
                 <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white mb-6 text-center">
                     ตารางการใช้งานห้องปฏิบัติการ
                 </h1>
+
+                {error && (
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                        <strong className="font-bold">เกิดข้อผิดพลาด!</strong>
+                        <span className="block sm:inline"> {error}</span>
+                    </div>
+                )}
 
                 {/* Room selection dropdown */}
                 <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
@@ -137,8 +186,7 @@ export default function LabSchedulePage() {
                                     {timeSlots.map((slot) => (
                                         <tr key={slot.id}>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 sticky left-0">
-                                                {slot.name} <br />
-                                                <span className="text-xs text-gray-500">{slot.time}</span>
+                                                {slot.time} {/* Use slot.time as the primary display for time slots */}
                                             </td>
                                             {daysToShow.map((date, index) => {
                                                 const booking = getBookingInfo(date, slot.time, selectedRoomId);
@@ -167,13 +215,14 @@ export default function LabSchedulePage() {
 
                         {/* Right side: Booking Form (Conditional) */}
                         <div className="w-full lg:w-96 flex-shrink-0">
-                            {status === 'authenticated' ? (
+                            {sessionStatus === 'authenticated' ? (
                                 <BookingForm
                                     onBookingSuccess={fetchData}
                                     teachers={teachers}
                                     grades={grades}
                                     timeSlots={timeSlots}
-                                    rooms={rooms} // NEW: Pass rooms to the form
+                                    rooms={rooms}
+                                    selectedRoomId={selectedRoomId} // Pass selected room ID to the form
                                 />
                             ) : (
                                 <div className="p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md text-center">

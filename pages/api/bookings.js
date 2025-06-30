@@ -1,67 +1,151 @@
-// This is a mock database. In a real app, you would use a database like MongoDB or PostgreSQL.
-let bookings = [
-    { id: 'b1', teacher: 'ครูสมศรี', grade: 'ม.1', date: '2025-06-30', timeSlot: '10:00-11:00', roomId: 'R1', status: 'approved' },
-    { id: 'b2', teacher: 'ครูสมชาย', grade: 'ม.2', date: '2025-07-01', timeSlot: '11:00-12:00', roomId: 'R1', status: 'approved' },
-    { id: 'b3', teacher: 'ครูสุดา', grade: 'ม.3', date: '2025-07-02', timeSlot: '09:00-10:00', roomId: 'R2', status: 'approved' },
-    { id: 'b4', teacher: 'ครูเอก', grade: 'ม.4', date: '2025-07-02', timeSlot: '14:00-15:00', roomId: 'R1', status: 'pending' }, // Example of pending booking
-];
+import { PrismaClient } from '@prisma/client';
 
-export default function handler(req, res) {
-    // GET: Return all bookings
-    if (req.method === 'GET') {
-        res.status(200).json(bookings);
-    }
+const prisma = new PrismaClient(); // สร้างอินสแตนซ์ใหม่ของ PrismaClient
 
-    // POST: Create a new booking
-    else if (req.method === 'POST') {
-        const { teacher, grade, date, timeSlot, roomId, status } = req.body;
-        // Simple validation
-        if (!teacher || !grade || !date || !timeSlot || !roomId) {
-            return res.status(400).json({ error: 'Missing required fields' });
+export default async function handler(req, res) {
+    // ไม่ต้องใช้ ID ใน query สำหรับการดำเนินการกับคอลเลกชัน (GET ทั้งหมด, POST ใหม่)
+    // ID จาก query ใช้สำหรับการดำเนินการกับ resource เฉพาะ (PUT, DELETE)
+    const { id } = req.query;
+
+    try {
+        switch (req.method) {
+            // GET: ดึงข้อมูลการจองทั้งหมด
+            // Endpoint: /api/bookings
+            case 'GET': { // เพิ่ม block scope
+                // ดึงการจองทั้งหมดและรวมข้อมูลความสัมพันธ์ที่เกี่ยวข้องสำหรับการแสดงผล
+                const bookings = await prisma.booking.findMany({
+                    include: {
+                        teacher: true,   // รวมอ็อบเจกต์ครู
+                        grade: true,     // รวมอ็อบเจกต์ระดับชั้น
+                        room: true,      // รวมอ็อบเจกต์ห้อง (Lab)
+                        timeSlot: true,  // รวมอ็อบเจกต์ช่วงเวลา
+                    },
+                    orderBy: [
+                        { date: 'asc' },      // เรียงตามวันที่จากน้อยไปมาก
+                        { timeSlot: { time: 'asc' } }, // จากนั้นเรียงตามเวลาของช่วงเวลาจากน้อยไปมาก
+                    ],
+                });
+                res.status(200).json(bookings);
+                break;
+            } // ปิด block scope
+
+            // POST: สร้างการจองใหม่
+            // Endpoint: /api/bookings
+            case 'POST': { // เพิ่ม block scope
+                // คาดหวัง IDs สำหรับความสัมพันธ์และสตริงวันที่
+                const { teacherId, gradeId, date, timeSlotId, roomId } = req.body;
+
+                // การตรวจสอบพื้นฐานสำหรับฟิลด์ที่จำเป็น
+                if (!teacherId || !gradeId || !date || !timeSlotId || !roomId ||
+                    date.trim() === '') { // date เป็นสตริง
+                    return res.status(400).json({ error: 'Bad Request', message: 'Missing required fields for booking.' });
+                }
+
+                try {
+                    // สร้างการจองใหม่โดยใช้ Prisma
+                    const newBooking = await prisma.booking.create({
+                        data: {
+                            teacherId: parseInt(teacherId), // แปลง ID เป็น Integer
+                            gradeId: parseInt(gradeId),
+                            date: date.trim(),
+                            timeSlotId: parseInt(timeSlotId),
+                            roomId: parseInt(roomId),
+                            status: 'pending', // สถานะเริ่มต้นสำหรับการจองใหม่
+                        },
+                        include: { // รวมความสัมพันธ์ใน Response สำหรับการอัปเดต frontend ทันที
+                            teacher: true, grade: true, room: true, timeSlot: true
+                        },
+                    });
+                    res.status(201).json(newBooking);
+                } catch (createError) {
+                    console.error('Prisma create booking error:', createError);
+                    // จัดการข้อผิดพลาดเฉพาะของ Prisma เช่น foreign key constraint
+                    if (createError.code === 'P2003') {
+                        return res.status(400).json({ error: 'Bad Request', message: 'ข้อมูลที่เชื่อมโยงไม่ถูกต้อง (เช่น Teacher ID, Grade ID, Room ID, Time Slot ID ไม่ถูกต้อง)' });
+                    }
+                    if (createError.code === 'P2002') { // Unique constraint violation (หากคุณเพิ่ม unique constraint ภายหลัง)
+                        return res.status(409).json({ error: 'Conflict', message: 'มีการจองในช่วงเวลานี้แล้ว' });
+                    }
+                    throw createError; // ส่ง error ที่ไม่คาดคิดอื่นๆ กลับไป
+                }
+            } // ปิด block scope
+
+            // PUT: อัปเดตการจองที่มีอยู่ (เช่น สถานะ หรือฟิลด์อื่นๆ)
+            // Endpoint: /api/bookings?id=<bookingId> หรือ /api/bookings/[id]
+            case 'PUT': { // เพิ่ม block scope
+                const updateId = id;
+                const { status, teacherId, gradeId, date, timeSlotId, roomId } = req.body;
+
+                if (!updateId) {
+                    return res.status(400).json({ error: 'Bad Request', message: 'Booking ID จำเป็นสำหรับการอัปเดต' });
+                }
+
+                const updateData = {};
+                if (status) updateData.status = status;
+                if (teacherId !== undefined) updateData.teacherId = parseInt(teacherId);
+                if (gradeId !== undefined) updateData.gradeId = parseInt(gradeId);
+                if (date !== undefined) updateData.date = date.trim();
+                if (timeSlotId !== undefined) updateData.timeSlotId = parseInt(timeSlotId);
+                if (roomId !== undefined) updateData.roomId = parseInt(roomId);
+
+                // ตรวจสอบให้แน่ใจว่ามีข้อมูลที่จะอัปเดตจริงๆ
+                if (Object.keys(updateData).length === 0) {
+                    return res.status(400).json({ error: 'Bad Request', message: 'ไม่มีข้อมูลให้อัปเดต' });
+                }
+
+                try {
+                    const updatedBooking = await prisma.booking.update({
+                        where: { id: parseInt(updateId) }, // แปลง ID เป็น Integer
+                        data: updateData,
+                        include: { // รวมความสัมพันธ์ใน Response
+                            teacher: true, grade: true, room: true, timeSlot: true
+                        },
+                    });
+                    res.status(200).json(updatedBooking);
+                } catch (updateError) {
+                    console.error('Prisma update booking error:', updateError);
+                    if (updateError.code === 'P2025') {
+                        return res.status(404).json({ error: 'Not Found', message: 'ไม่พบการจองที่ต้องการอัปเดต' });
+                    }
+                    if (updateError.code === 'P2003') {
+                        return res.status(400).json({ error: 'Bad Request', message: 'ข้อมูลที่เชื่อมโยงไม่ถูกต้อง' });
+                    }
+                    throw updateError;
+                }
+            } // ปิด block scope
+
+            // DELETE: ลบการจองโดยใช้ ID
+            // Endpoint: /api/bookings?id=<bookingId> หรือ /api/bookings/[id]
+            case 'DELETE': { // เพิ่ม block scope
+                const deleteId = id;
+                if (!deleteId) {
+                    return res.status(400).json({ error: 'Bad Request', message: 'Booking ID จำเป็นสำหรับการลบ' });
+                }
+                try {
+                    await prisma.booking.delete({
+                        where: { id: parseInt(deleteId) }, // แปลง ID เป็น Integer
+                    });
+                    res.status(200).json({ message: 'Booking deleted successfully' });
+                } catch (deleteError) {
+                    console.error('Prisma delete booking error:', deleteError);
+                    if (deleteError.code === 'P2025') {
+                        return res.status(404).json({ error: 'Not Found', message: 'ไม่พบการจองที่ต้องการลบ' });
+                    }
+                    throw deleteError;
+                }
+            } // ปิด block scope
+
+            // จัดการ methods ที่ไม่ได้กำหนดไว้อย่างชัดเจน
+            default: { // เพิ่ม block scope
+                res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
+                res.status(405).end(`Method ${req.method} Not Allowed`);
+                break;
+            } // ปิด block scope
         }
-
-        const newBooking = {
-            id: `b${Math.random().toString(36).substr(2, 9)}`, // Generate a unique ID
-            teacher,
-            grade,
-            date,
-            timeSlot,
-            roomId, // NEW: Save room ID
-            status: status || 'pending', // NEW: Set status, default to pending
-        };
-        bookings.push(newBooking);
-        res.status(201).json(newBooking);
-    }
-
-    // DELETE: Remove a booking
-    else if (req.method === 'DELETE') {
-        const { id } = req.query;
-        const initialLength = bookings.length;
-        bookings = bookings.filter(b => b.id !== id);
-        if (bookings.length < initialLength) {
-            res.status(200).json({ message: 'Booking deleted successfully' });
-        } else {
-            res.status(404).json({ error: 'Booking not found' });
-        }
-    }
-
-    // PUT: Update a booking (e.g., status)
-    else if (req.method === 'PUT') {
-        const { id } = req.query;
-        const { status } = req.body;
-        const bookingIndex = bookings.findIndex(b => b.id === id);
-
-        if (bookingIndex > -1) {
-            bookings[bookingIndex].status = status;
-            res.status(200).json(bookings[bookingIndex]);
-        } else {
-            res.status(404).json({ error: 'Booking not found' });
-        }
-    }
-
-    // Handle other methods
-    else {
-        res.setHeader('Allow', ['GET', 'POST', 'DELETE', 'PUT']);
-        res.status(405).end(`Method ${req.method} Not Allowed`);
+    } catch (error) {
+        console.error('API Error (bookings):', error);
+        res.status(500).json({ error: 'Internal server error', message: error.message || 'An unexpected error occurred.' });
+    } finally {
+        await prisma.$disconnect(); // ตัดการเชื่อมต่อ Prisma client
     }
 }
