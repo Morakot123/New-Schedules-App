@@ -9,7 +9,7 @@ import { SessionProvider } from 'next-auth/react';
 // คอมโพเนนต์ Layout ของคุณ ที่มี Navbar และ Footer
 // ตรวจสอบให้แน่ใจว่า Path ไปยังไฟล์ Layout.js ของคุณถูกต้อง
 import Layout from '../components/Layout';
-// ถ้าคุณใช้ next-themes สำหรับ Dark Mode ให้เปิดคอมเมนต์บรรทัดนี้:
+// หากคุณใช้ next-themes สำหรับ Dark Mode ให้เปิดคอมเมนต์บรรทัดนี้:
 // import { ThemeProvider } from 'next-themes';
 
 function MyApp({ Component, pageProps: { session, ...pageProps } }) {
@@ -24,7 +24,7 @@ function MyApp({ Component, pageProps: { session, ...pageProps } }) {
           เพียงแค่ **ครั้งเดียว** ที่นี่ในไฟล์ _app.js เท่านั้น
 
           **กฎที่ต้องจำ:**
-          ในไฟล์หน้าเพจอื่นๆ (เช่น pages/admin/basic-data.js, pages/admin/schedules.js, pages/admin/bookings.js):
+          ในไฟล์หน้าเพจอื่นๆ (เช่น pages/admin/basic-data.js, pages/admin/schedules.js, pages/admin/bookings.js, pages/admin/teachers.js):
           1. ห้าม import `Layout`
           2. ห้ามใช้แท็ก `<Layout>` ครอบเนื้อหาของหน้าเพจเหล่านั้นเด็ดขาด
 
@@ -32,7 +32,7 @@ function MyApp({ Component, pageProps: { session, ...pageProps } }) {
         */}
       <Layout>
         {/*
-            Component คือหน้าเพจปัจจุบันที่ Next.js กำลังจะแสดงผล (เช่น AdminBasicDataPage)
+            Component คือหน้าเพจปัจจุบันที่ Next.js กำลังจะแสดงผล (เช่น AdminBasicDataPage, AdminTeachersPage)
             pageProps คือ props ที่ถูกส่งมาจาก getServerSideProps หรือ getStaticProps ของหน้านั้นๆ
           */}
         <Component {...pageProps} />

@@ -1,93 +1,165 @@
-import { PrismaClient } from '@prisma/client'
-import { getSession } from 'next-auth/react'
-import bcrypt from 'bcryptjs'
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient(); // สร้างอินสแตนซ์ใหม่ของ PrismaClient
+
+// ฟังก์ชันสำหรับสร้างรหัสผ่านสุ่ม
+const generateRandomPassword = (length = 10) => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+";
+    let password = "";
+    for (let i = 0; i < length; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+};
 
 export default async function handler(req, res) {
-    // 1. Get the session and check for admin role
-    const session = await getSession({ req })
-    if (!session || session.user.role !== 'admin') {
-        // Return 403 Forbidden for unauthorized access
-        return res.status(403).json({ error: 'Forbidden', message: 'คุณไม่มีสิทธิ์เข้าถึง' })
-    }
+    const { id } = req.query;
 
     try {
         switch (req.method) {
-            case 'GET':
-                // --- GET all users with the 'teacher' role ---
-                const teachers = await prisma.user.findMany({
-                    where: { role: 'teacher' },
-                    select: {
-                        // Explicitly select only necessary public fields
-                        id: true,
-                        name: true,
-                        email: true,
+            // GET: ดึงครูทั้งหมดจากฐานข้อมูล
+            case 'GET': { // เพิ่ม block scope
+                const teachers = await prisma.teacher.findMany({
+                    include: {
+                        user: { // รวมโมเดล User ที่เกี่ยวข้องเพื่อดึงอีเมล
+                            select: {
+                                email: true,
+                            },
+                        },
                     },
                     orderBy: {
-                        name: 'asc' // Sort by name for a better user experience
-                    }
-                })
-                return res.status(200).json(teachers)
-
-            case 'POST':
-                // --- CREATE a new user with the 'teacher' role ---
-                const { name, email, password } = req.body
-
-                // 2. Input Validation: Ensure all required fields are present and valid
-                if (!name || !email || !password || name.trim() === '' || email.trim() === '' || password.trim() === '') {
-                    return res.status(400).json({ error: 'Bad Request', message: 'กรุณากรอกข้อมูลให้ครบทุกช่อง' })
-                }
-
-                // Validate email format (optional but recommended)
-                if (!/\S+@\S+\.\S+/.test(email)) {
-                    return res.status(400).json({ error: 'Bad Request', message: 'รูปแบบอีเมลไม่ถูกต้อง' });
-                }
-
-                // Check if a user with the same email already exists
-                const existingUser = await prisma.user.findUnique({ where: { email } })
-                if (existingUser) {
-                    return res.status(409).json({ error: 'Conflict', message: 'อีเมลนี้ถูกใช้แล้ว' })
-                }
-
-                // Hash the password securely
-                const hashedPassword = await bcrypt.hash(password, 12) // Use a stronger salt round (e.g., 12)
-
-                const newUser = await prisma.user.create({
-                    data: {
-                        name: name.trim(),
-                        email: email.trim(),
-                        password: hashedPassword,
-                        role: 'teacher',
-                        // Connect to the `teachers` model if your schema requires it
-                        // This creates a related `Teacher` record for the `User`
-                        teachers: {
-                            create: { name: name.trim() }
-                        }
+                        name: 'asc', // เรียงครูตามชื่อตัวอักษร
                     },
-                    select: {
-                        // Return only safe data after creation
-                        id: true,
-                        name: true,
-                        email: true,
-                        role: true,
+                });
+                res.status(200).json(teachers);
+                break;
+            } // ปิด block scope
+
+            // POST: สร้างครูใหม่ (รวมถึงการสร้าง User ใหม่ด้วยข้อมูลเริ่มต้น)
+            case 'POST': { // เพิ่ม block scope
+                const { name } = req.body;
+
+                if (!name || name.trim() === '') {
+                    return res.status(400).json({ error: 'Bad Request', message: 'Teacher name is required.' });
+                }
+
+                // สร้างอีเมลและรหัสผ่านแบบสุ่ม
+                const generatedEmail = `${name.trim().toLowerCase().replace(/\s/g, '.')}-${Date.now()}@example.com`;
+                const generatedPassword = generateRandomPassword(12);
+                const hashedPassword = await bcrypt.hash(generatedPassword, 12);
+
+                // ตรวจสอบว่าอีเมลที่สร้างขึ้นมีอยู่แล้วหรือไม่
+                const existingUser = await prisma.user.findUnique({ where: { email: generatedEmail } });
+                if (existingUser) {
+                    return res.status(409).json({ error: 'Conflict', message: 'Generated email already in use. Please try again.' });
+                }
+
+                const newTeacherEntry = await prisma.$transaction(async (prisma) => {
+                    // สร้าง User ก่อน
+                    const newUser = await prisma.user.create({
+                        data: {
+                            name: name.trim(),
+                            email: generatedEmail,
+                            password: hashedPassword,
+                            role: 'teacher', // กำหนดบทบาทเป็น 'teacher'
+                        },
+                    });
+
+                    // จากนั้นสร้าง Teacher โดยเชื่อมโยงกับ User ที่สร้างขึ้น
+                    const newTeacher = await prisma.teacher.create({
+                        data: {
+                            userId: newUser.id, // เชื่อมโยงกับ ID ของ User ที่สร้างขึ้น
+                            name: name.trim(), // ใช้ชื่อเดียวกับ User
+                        },
+                    });
+                    // คืนค่าอ็อบเจกต์ครูที่สร้างขึ้นพร้อมอีเมลของ User
+                    return { ...newTeacher, user: { email: newUser.email } };
+                });
+
+                res.status(201).json(newTeacherEntry);
+                break;
+            } // ปิด block scope
+
+            // PUT: อัปเดตครูที่มีอยู่
+            case 'PUT': { // เพิ่ม block scope
+                const updateId = id || req.body.id;
+                const { name: updatedName } = req.body;
+
+                if (!updateId || !updatedName || updatedName.trim() === '') {
+                    return res.status(400).json({ error: 'Bad Request', message: 'Teacher ID and name are required for update.' });
+                }
+
+                try {
+                    // ตรวจสอบว่าชื่อใหม่มีอยู่แล้วสำหรับครูคนอื่นหรือไม่
+                    const existingTeacherWithName = await prisma.teacher.findUnique({
+                        where: { name: updatedName.trim() },
+                    });
+                    if (existingTeacherWithName && String(existingTeacherWithName.id) !== String(updateId)) {
+                        return res.status(409).json({ error: 'Conflict', message: 'Another teacher with this name already exists.' });
                     }
-                })
 
-                // Return 201 Created for a successful creation
-                return res.status(201).json(newUser)
+                    const updatedTeacher = await prisma.teacher.update({
+                        where: { id: parseInt(updateId) },
+                        data: { name: updatedName.trim() },
+                        include: {
+                            user: {
+                                select: {
+                                    email: true
+                                }
+                            }
+                        }
+                    });
+                    res.status(200).json(updatedTeacher);
+                } catch (updateError) {
+                    if (updateError.code === 'P2025') {
+                        return res.status(404).json({ error: 'Not Found', message: 'Teacher not found.' });
+                    }
+                    throw updateError;
+                }
+                break;
+            } // ปิด block scope
 
-            default:
-                // --- Handle unsupported HTTP methods ---
-                res.setHeader('Allow', ['GET', 'POST'])
-                return res.status(405).json({ error: 'Method Not Allowed', message: `Method ${req.method} is not allowed` })
+            // DELETE: ลบครู
+            case 'DELETE': { // เพิ่ม block scope
+                const deleteId = id;
+
+                if (!deleteId) {
+                    return res.status(400).json({ error: 'Bad Request', message: 'Teacher ID is required for deletion.' });
+                }
+
+                // ดึงข้อมูลครูเพื่อหา userId ที่เกี่ยวข้อง
+                const teacherToDelete = await prisma.teacher.findUnique({
+                    where: { id: parseInt(deleteId) },
+                });
+
+                if (!teacherToDelete) {
+                    return res.status(404).json({ error: 'Not Found', message: 'Teacher not found.' });
+                }
+
+                // ลบ User ที่เกี่ยวข้องด้วย
+                // เนื่องจากมีความสัมพันธ์แบบ Cascade, การลบ User จะลบ Teacher, Account, Session, Schedule ที่เกี่ยวข้องด้วย
+                await prisma.user.delete({
+                    where: { id: teacherToDelete.userId },
+                });
+
+                res.status(200).json({ message: 'Teacher and associated user deleted successfully.' });
+                break;
+            } // ปิด block scope
+
+            default: { // เพิ่ม block scope
+                res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
+                res.status(405).end(`Method ${req.method} Not Allowed`);
+                break;
+            } // ปิด block scope
         }
     } catch (error) {
-        console.error('API Error (teachers):', error) // Log the full error for debugging
-        // Return a generic 500 error for any unexpected server issues
-        return res.status(500).json({ error: 'Internal Server Error', message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' })
+        console.error('API Error (teachers):', error);
+        if (error.code === 'P2002') {
+            return res.status(409).json({ error: 'Conflict', message: 'Teacher with this name or email might already exist.' });
+        }
+        res.status(500).json({ error: 'Internal Server Error', message: error.message || 'An unexpected error occurred.' });
     } finally {
-        // 3. Ensure the database connection is closed after the request is handled
-        await prisma.$disconnect()
+        await prisma.$disconnect();
     }
 }

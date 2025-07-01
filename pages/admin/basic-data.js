@@ -1,9 +1,12 @@
 // pages/admin/basic-data.js
 import { getSession, useSession } from 'next-auth/react';
+import { useState } from 'react';
 // ไม่ต้อง import Layout ที่นี่ เพราะ _app.js จัดการ Layout หลักแล้ว
 import ManageTeachersForm from '../../components/ManageTeachersForm';
 import ManageGradesForm from '../../components/ManageGradesForm';
 import ManageTimeSlotsForm from '../../components/ManageTimeSlotsForm';
+// *** ลบ: ไม่ต้อง import ManageLabsForm ที่นี่แล้ว เนื่องจากมีหน้าแยกต่างหาก ***
+// import ManageLabsForm from '../../components/ManageLabsForm'; 
 import Alert from '../../components/Alert'; // ตรวจสอบว่ามี Alert component
 
 export default function AdminBasicDataPage() {
@@ -25,9 +28,7 @@ export default function AdminBasicDataPage() {
 
     if (!session || session.user.role !== 'admin') {
         return (
-            // หากคุณมี Layout component ที่ _app.js ไม่ได้ครอบให้
-            // หรือต้องการแสดงเฉพาะข้อความ error โดยไม่มี navigation bar
-            // ให้เพิ่ม div ครอบ หรือใช้ Layout ตามที่เหมาะสมกับโครงสร้างของคุณ
+            // แสดงข้อความปฏิเสธการเข้าถึงโดยไม่มี Layout ซ้อนทับ
             <div className="flex items-center justify-center min-h-screen p-8 text-center bg-gray-100 dark:bg-gray-800 text-red-600 dark:text-red-400">
                 <p className="text-2xl font-bold">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</p>
             </div>
@@ -61,6 +62,11 @@ export default function AdminBasicDataPage() {
                 <div className="col-span-1">
                     <ManageTimeSlotsForm onTimeSlotUpdate={handleUpdate} />
                 </div>
+
+                {/* *** ลบ: ไม่ต้องมี ManageLabsForm ที่นี่แล้ว *** */}
+                {/* <div className="col-span-1">
+                    <ManageLabsForm onLabUpdate={handleUpdate} />
+                </div> */}
             </div>
         </div>
     );

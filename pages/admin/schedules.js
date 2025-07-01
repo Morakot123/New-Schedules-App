@@ -13,6 +13,7 @@ export default function AdminSchedulesPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
+    const [submitting, setSubmitting] = useState(false); // *** เพิ่มบรรทัดนี้เพื่อแก้ไข ReferenceError ***
 
     // Form states for adding new schedule
     const [newSchedule, setNewSchedule] = useState({

@@ -161,7 +161,7 @@ export default function ManageTeachersForm({ onTeacherUpdate }) {
                     // ปรับปรุง Dark Mode:
                     // ในโหมดสว่าง: bg-white (พื้นหลัง), text-gray-900 (ข้อความ), border-gray-300 (ขอบ)
                     // ในโหมดมืด: dark:bg-gray-700 (พื้นหลังเข้มขึ้น), dark:text-white (ข้อความขาว), dark:border-gray-600 (ขอบเข้มขึ้น)
-                    className="w-full sm:flex-grow p-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
+                    className="w-full sm:flex-grow p-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                     disabled={submitting}
                 />
                 <div className="flex gap-2 w-full sm:w-auto"> {/* Wrap buttons in a div for better control */}

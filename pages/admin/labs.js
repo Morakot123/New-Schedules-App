@@ -1,211 +1,68 @@
-import Layout from '../../components/Layout'
-import { useEffect, useState } from 'react'
-import { getSession } from 'next-auth/react'
-import Alert from '../../components/Alert' // Assuming you have a reusable Alert component
+// pages/admin/labs.js
+import { getSession, useSession } from 'next-auth/react';
+import ManageLabsForm from '../../components/ManageLabsForm'; // ตรวจสอบ Path ให้ถูกต้อง
+import Alert from '../../components/Alert'; // ตรวจสอบว่ามี Alert component
 
-// ---
-// 1. Component Logic and State
-// ---
+export default function AdminLabsPage() {
+    const { data: session, status } = useSession();
+    // คุณสามารถเพิ่ม state สำหรับ alert message ที่นี่ได้ หาก ManageLabsForm ส่ง callback กลับมา
+    // const [alertMessage, setAlertMessage] = useState(null);
+    // const [alertType, setAlertType] = useState('');
 
-export default function LabAdminPage() {
-    const [labs, setLabs] = useState([])
-    const [name, setName] = useState('')
-    const [isLoading, setIsLoading] = useState(true) // Initial loading state for data fetch
-    const [isAdding, setIsAdding] = useState(false) // Loading state for adding a lab
-    const [isDeleting, setIsDeleting] = useState(null) // State to track which lab is being deleted
-    const [alert, setAlert] = useState(null) // Unified state for success/error alerts
+    // ฟังก์ชันสำหรับรีเฟรชข้อมูลหรือแสดงข้อความสำเร็จหลังจาก ManageLabsForm อัปเดตข้อมูล
+    const handleLabUpdate = () => {
+        // คุณสามารถเพิ่ม logic เช่น แสดงข้อความสำเร็จ หรือรีเฟรชข้อมูลอื่นๆ ที่เกี่ยวข้อง
+        // setAlertMessage("ข้อมูลห้องปฏิบัติการอัปเดตแล้ว");
+        // setAlertType("success");
+    };
 
-    // ---
-    // 2. Data Fetching
-    // ---
-
-    useEffect(() => {
-        const fetchLabs = async () => {
-            setIsLoading(true)
-            try {
-                const res = await fetch('/api/admin/labs')
-                if (!res.ok) {
-                    throw new Error('ไม่สามารถโหลดข้อมูลห้องปฏิบัติการได้')
-                }
-                const data = await res.json()
-                setLabs(data)
-            } catch (err) {
-                console.error('❌ Error fetching labs:', err)
-                setAlert({ type: 'error', message: err.message })
-            } finally {
-                setIsLoading(false)
-            }
-        }
-
-        fetchLabs()
-    }, [])
-
-    // ---
-    // 3. Handlers for Add and Delete Actions
-    // ---
-
-    const handleAdd = async (e) => {
-        e.preventDefault()
-        const trimmedName = name.trim()
-        if (!trimmedName) return
-
-        setIsAdding(true)
-        setAlert(null) // Clear any previous alerts
-
-        try {
-            const res = await fetch('/api/admin/labs', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: trimmedName }),
-            })
-
-            if (!res.ok) {
-                const errorData = await res.json()
-                throw new Error(errorData.message || 'เกิดข้อผิดพลาดในการเพิ่มห้องปฏิบัติการ')
-            }
-
-            const addedLab = await res.json()
-            setLabs((prevLabs) => [...prevLabs, addedLab]) // Optimistically update the list
-            setName('') // Clear the input
-            setAlert({ type: 'success', message: `✅ เพิ่มห้องปฏิบัติการ "${addedLab.name}" สำเร็จ` })
-        } catch (err) {
-            setAlert({ type: 'error', message: err.message })
-        } finally {
-            setIsAdding(false)
-        }
+    // การตรวจสอบสิทธิ์การเข้าถึง: แสดงหน้า Loading หรือ Denied ถ้าไม่มีสิทธิ์
+    if (status === 'loading') {
+        return <div className="text-center p-10 dark:text-gray-300">กำลังโหลด...</div>;
     }
-
-    const handleDelete = async (id) => {
-        if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบห้องปฏิบัติการนี้? การดำเนินการนี้ไม่สามารถย้อนกลับได้')) {
-            return
-        }
-
-        setIsDeleting(id)
-        setAlert(null)
-
-        try {
-            const res = await fetch(`/api/admin/labs/${id}`, { method: 'DELETE' })
-
-            if (!res.ok) {
-                const errorData = await res.json()
-                throw new Error(errorData.message || 'เกิดข้อผิดพลาดในการลบห้องปฏิบัติการ')
-            }
-
-            setLabs((prevLabs) => prevLabs.filter((lab) => lab.id !== id))
-            setAlert({ type: 'success', message: '🗑️ ลบห้องปฏิบัติการสำเร็จ' })
-        } catch (err) {
-            setAlert({ type: 'error', message: err.message })
-        } finally {
-            setIsDeleting(null)
-        }
-    }
-
-    // ---
-    // 4. Render UI based on state
-    // ---
-
-    return (
-        <Layout>
-            <div className="main-content-container">
-                <h1 className="page-title text-center">
-                    <span className="bg-gradient-to-r from-purple-500 to-fuchsia-600 bg-clip-text text-transparent">
-                        🧪 จัดการห้องปฏิบัติการ
-                    </span>
-                </h1>
-
-                <div className="mx-auto max-w-2xl">
-                    {alert && <Alert type={alert.type} message={alert.message} dismissible onClose={() => setAlert(null)} />}
-
-                    {/* Add Lab Form */}
-                    <form onSubmit={handleAdd} className="form-box mb-8 animate-fade-in-up">
-                        <div className="form-group">
-                            <label htmlFor="name" className="form-label">
-                                เพิ่มชื่อห้องปฏิบัติการใหม่
-                            </label>
-                            <div className="flex gap-3">
-                                <input
-                                    id="name"
-                                    type="text"
-                                    placeholder="เช่น Lab A"
-                                    className="form-input flex-grow"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    disabled={isAdding}
-                                    required
-                                />
-                                <button type="submit" className="btn btn-primary min-w-[100px]" disabled={isAdding}>
-                                    {isAdding ? 'กำลังเพิ่ม...' : '➕ เพิ่ม'}
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-
-                    {/* Labs List */}
-                    <div className="table-container animate-fade-in-up">
-                        {isLoading ? (
-                            <div className="flex justify-center py-10">
-                                <div className="spinner-loader"></div>
-                                <p className="ml-3 text-gray-500">กำลังโหลดข้อมูล...</p>
-                            </div>
-                        ) : labs.length === 0 ? (
-                            <div className="py-10 text-center text-gray-500">
-                                <p>ยังไม่มีห้องปฏิบัติการในระบบ</p>
-                            </div>
-                        ) : (
-                            <table className="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>ชื่อห้อง</th>
-                                        <th className="text-right">การจัดการ</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {labs.map((lab) => (
-                                        <tr key={lab.id}>
-                                            <td>{lab.name}</td>
-                                            <td className="action-cell">
-                                                <button
-                                                    className="btn btn-danger"
-                                                    onClick={() => handleDelete(lab.id)}
-                                                    disabled={isDeleting === lab.id}
-                                                >
-                                                    {isDeleting === lab.id ? (
-                                                        <div className="spinner-sm"></div>
-                                                    ) : (
-                                                        '🗑 ลบ'
-                                                    )}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </Layout>
-    )
-}
-
-// ---
-// 🔐 Server-Side Authentication
-// ---
-
-export async function getServerSideProps(context) {
-    const session = await getSession(context)
 
     if (!session || session.user.role !== 'admin') {
-        // Redirect to a custom "denied" page or login page
+        return (
+            <div className="flex items-center justify-center min-h-screen p-8 text-center bg-gray-100 dark:bg-gray-800 text-red-600 dark:text-red-400">
+                <p className="text-2xl font-bold">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</p>
+            </div>
+        );
+    }
+
+    return (
+        // เนื้อหาของหน้านี้จะถูกห่อหุ้มด้วย Layout ใน pages/_app.js อยู่แล้ว
+        // ดังนั้นไม่จำเป็นต้องใช้ <Layout> ที่นี่
+        <div className="main-content-container p-6 bg-gray-100 dark:bg-gray-800 min-h-screen">
+            <h1 className="page-title text-center mb-8">
+                <span className="bg-gradient-to-r from-teal-500 to-cyan-600 bg-clip-text text-transparent">
+                    💻 จัดการห้องปฏิบัติการ (Admin)
+                </span>
+            </h1>
+
+            {/* {alertMessage && <Alert type={alertType} message={alertMessage} dismissible onClose={() => setAlertMessage(null)} />} */}
+
+            <div className="max-w-4xl mx-auto">
+                {/* คอมโพเนนต์จัดการห้องปฏิบัติการ */}
+                <ManageLabsForm onLabUpdate={handleLabUpdate} />
+            </div>
+        </div>
+    );
+}
+
+// getServerSideProps สำหรับการตรวจสอบสิทธิ์ฝั่งเซิร์ฟเวอร์
+export async function getServerSideProps(context) {
+    const session = await getSession(context);
+
+    if (!session || session.user.role !== 'admin') {
         return {
             redirect: {
-                destination: '/denied',
+                destination: '/denied', // หรือหน้าที่แสดงการเข้าถึงถูกปฏิเสธ
                 permanent: false,
             },
-        }
+        };
     }
 
     return {
         props: { session },
-    }
+    };
 }

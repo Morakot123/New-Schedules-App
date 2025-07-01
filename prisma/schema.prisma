@@ -76,7 +76,7 @@ model Teacher {
   userId    Int        @unique // Foreign key ที่เชื่อมโยงกับ User ที่ไม่ซ้ำกัน; รับประกัน User หนึ่งคนต่อโปรไฟล์ Teacher หนึ่งโปรไฟล์
   user      User       @relation("UserToTeacher", fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับโมเดล User; การลบแบบ Cascade
   schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่ครูสอน
-  bookings  Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่ทำโดยครูคนนี้
+  bookings  Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt // วันที่อัปเดตล่าสุด
 }
@@ -85,9 +85,9 @@ model Teacher {
 model Student {
   id          Int         @id @default(autoincrement())
   name        String
-  userId      Int         @unique // Foreign key ที่เชื่อมโยงกับ User
+  userId      Int         @unique // Foreign key to User
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ User; การลบแบบ Cascade
-  classGroupId Int?       // Foreign key ที่เป็นทางเลือกไปยัง ClassGroup
+  classGroupId Int?       // Optional foreign key to a ClassGroup
   classGroup  ClassGroup? @relation(fields: [classGroupId], references: [id]) // การเชื่อมโยงที่เป็นทางเลือกไปยัง ClassGroup
   createdAt   DateTime    @default(now()) // วันที่สร้างบันทึกนักเรียน
   updatedAt   DateTime    @updatedAt // วันที่อัปเดตล่าสุด
@@ -95,12 +95,14 @@ model Student {
 
 // โมเดล Lab: แสดงถึงห้องปฏิบัติการ
 model Lab {
-  id        Int        @id @default(autoincrement())
-  name      String     @unique // ชื่อเฉพาะสำหรับแต่ละห้องปฏิบัติการ
-  schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่จัดในห้องปฏิบัติการนี้
-  bookings  Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่ทำในห้องนี้
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt // วันที่อัปเดตล่าสุด
+  id          Int        @id @default(autoincrement())
+  name        String     @unique // ชื่อเฉพาะสำหรับแต่ละห้องปฏิบัติการ (เช่น "ห้องปฏิบัติการชีวะ")
+  roomNumber  String?    // หมายเลขห้อง (เช่น "301", "Lab A") - เป็นทางเลือก (optional)
+  capacity    Int?       // ความจุคนสูงสุด - เป็นทางเลือก (optional)
+  schedules   Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่จัดในห้องปฏิบัติการนี้
+  bookings    Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt // วันที่อัปเดตล่าสุด
 }
 
 // โมเดล ClassGroup: แสดงถึงกลุ่มนักเรียน (เช่น ชั้นเรียน)
