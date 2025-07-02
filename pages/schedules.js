@@ -110,13 +110,14 @@ export default function LabSchedulePage() {
     const formatDate = (date) => date.toISOString().split('T')[0];
 
     // Function to get booking info for a specific date, time slot, and room
-    const getBookingInfo = (date, time, roomId) => {
+    const getBookingInfo = (date, timeSlotTime, roomId) => { // เปลี่ยนชื่อ parameter เป็น timeSlotTime
         const formattedDate = formatDate(date);
         // Ensure bookings is an array before calling find
         if (!Array.isArray(bookings)) return null;
 
         return bookings.find(
-            (booking) => booking.date === formattedDate && booking.timeSlot === time && booking.roomId === roomId && booking.status === 'approved'
+            // แก้ไขการเปรียบเทียบ: เข้าถึง booking.timeSlot.time แทน booking.timeSlot โดยตรง
+            (booking) => booking.date === formattedDate && booking.timeSlot?.time === timeSlotTime && booking.room?.id === roomId && booking.status === 'approved'
         );
     };
 
@@ -130,9 +131,23 @@ export default function LabSchedulePage() {
 
     return (
         <div className="min-h-[calc(100vh-64px)] p-8 bg-gray-100 dark:bg-gray-800 dark:text-white transition-colors duration-300">
-            <div className="max-w-7xl mx-auto">
-                <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white mb-6 text-center">
-                    ตารางการใช้งานห้องปฏิบัติการ
+            {/* Removed max-w-7xl to allow content to span wider */}
+            <div className="mx-auto w-full"> {/* Use w-full to ensure it takes available width, mx-auto for centering if needed by parent */}
+                <h1 className="text-xl font-extrabold text-gray-900 dark:text-white mb-6 text-center flex items-center justify-center gap-3"> {/* เปลี่ยน text-3xl เป็น text-xl */}
+                    {/* SVG Logo for Smart Lab */}
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-blue-500">
+                        <path d="M4 6V18C4 19.1046 4.89543 20 6 20H18C19.1046 20 20 19.1046 20 18V6C20 4.89543 19.1046 4 18 4H6C4.89543 4 4 4.89543 4 6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M7 17H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M10 13H14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M12 9V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="9" cy="9" r="1" fill="currentColor" />
+                        <circle cx="15" cy="9" r="1" fill="currentColor" />
+                    </svg>
+                    <span>
+                        ระบบบริหารจัดการและจองห้องปฏิบัติการอัจฉริยะ
+                        <br className="sm:hidden" /> {/* Line break for small screens */}
+                        (Smart Lab Management and Booking System - SLMBS)
+                    </span>
                 </h1>
 
                 {error && (
@@ -159,12 +174,36 @@ export default function LabSchedulePage() {
                     </select>
                 </div>
 
+                {/* Conditional Login Message */}
+                {sessionStatus !== 'authenticated' && (
+                    <div className="p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md text-center mb-8">
+                        <p className="text-lg font-bold mb-4">กรุณาเข้าสู่ระบบเพื่อจองห้อง</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                            หากยังไม่มีบัญชี <a href="/register" className="text-blue-600 hover:underline">คลิกที่นี่เพื่อสมัครสมาชิก</a>
+                        </p>
+                    </div>
+                )}
+
                 {loading ? (
                     <p className="text-center text-xl text-gray-500">กำลังโหลดตาราง...</p>
                 ) : (
-                    <div className="flex flex-col lg:flex-row gap-8">
-                        {/* Left side: Schedule Table */}
-                        <div className="flex-1 overflow-x-auto rounded-lg shadow-md bg-white dark:bg-gray-900">
+                    <div className="flex flex-col gap-8"> {/* Changed to flex-col for all screen sizes */}
+                        {/* Booking Form (Conditional) - Moved to top */}
+                        {sessionStatus === 'authenticated' && (
+                            <div className="w-full flex-shrink-0"> {/* Ensure it takes full width */}
+                                <BookingForm
+                                    onBookingSuccess={fetchData}
+                                    teachers={teachers}
+                                    grades={grades}
+                                    timeSlots={timeSlots}
+                                    rooms={rooms}
+                                    selectedRoomId={selectedRoomId} // Pass selected room ID to the form
+                                />
+                            </div>
+                        )}
+
+                        {/* Schedule Table - Now below the form */}
+                        <div className="flex-1 rounded-lg shadow-md bg-white dark:bg-gray-900 overflow-x-auto"> {/* Added overflow-x-auto here for the table */}
                             <h3 className="text-2xl font-bold p-4 bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 sticky top-0">
                                 {selectedRoomName}
                             </h3>
@@ -189,7 +228,7 @@ export default function LabSchedulePage() {
                                                 {slot.time} {/* Use slot.time as the primary display for time slots */}
                                             </td>
                                             {daysToShow.map((date, index) => {
-                                                const booking = getBookingInfo(date, slot.time, selectedRoomId);
+                                                const booking = getBookingInfo(date, slot.time, selectedRoomId); // ส่ง slot.time แทน slot
                                                 return (
                                                     <td
                                                         key={index}
@@ -198,8 +237,8 @@ export default function LabSchedulePage() {
                                                     >
                                                         {booking ? (
                                                             <>
-                                                                <div className="font-bold">{booking.teacher}</div>
-                                                                <div className="text-xs text-red-600 dark:text-red-300">({booking.grade})</div>
+                                                                <div className="font-bold">{booking.teacher?.name}</div> {/* ใช้ booking.teacher?.name */}
+                                                                <div className="text-xs text-red-600 dark:text-red-300">({booking.grade?.name})</div> {/* ใช้ booking.grade?.name */}
                                                             </>
                                                         ) : (
                                                             'ว่าง'
@@ -211,27 +250,6 @@ export default function LabSchedulePage() {
                                     ))}
                                 </tbody>
                             </table>
-                        </div>
-
-                        {/* Right side: Booking Form (Conditional) */}
-                        <div className="w-full lg:w-96 flex-shrink-0">
-                            {sessionStatus === 'authenticated' ? (
-                                <BookingForm
-                                    onBookingSuccess={fetchData}
-                                    teachers={teachers}
-                                    grades={grades}
-                                    timeSlots={timeSlots}
-                                    rooms={rooms}
-                                    selectedRoomId={selectedRoomId} // Pass selected room ID to the form
-                                />
-                            ) : (
-                                <div className="p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md text-center">
-                                    <p className="text-lg font-bold mb-4">กรุณาเข้าสู่ระบบเพื่อจองห้อง</p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                                        หากยังไม่มีบัญชี <a href="/register" className="text-blue-600 hover:underline">คลิกที่นี่เพื่อสมัครสมาชิก</a>
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}

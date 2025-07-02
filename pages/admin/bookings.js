@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useSession, getSession } from 'next-auth/react';
-// ไม่ต้อง import Layout ที่นี่ เพราะ _app.js จัดการ Layout หลักแล้ว
-import Alert from '../../components/Alert';   // ตรวจสอบว่ามี Alert component
+import Alert from '../../components/Alert'; // ตรวจสอบว่ามี Alert component
 
 export default function AdminBookingsPage() {
     const { data: session, status: sessionStatus } = useSession();
     const [allBookings, setAllBookings] = useState([]); // All bookings fetched from API
-    const [pendingBookings, setPendingBookings] = useState([]); // Filtered pending bookings
+    const [filteredBookings, setFilteredBookings] = useState([]); // Bookings filtered by status
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [submittingId, setSubmittingId] = useState(null); // To track which booking is being approved/rejected
+    const [filterStatus, setFilterStatus] = useState('pending'); // Default filter to 'pending'
 
     // Function to fetch all bookings from the admin API
     const fetchBookings = async () => {
@@ -29,8 +29,8 @@ export default function AdminBookingsPage() {
             // Validate if the fetched data is an array
             if (Array.isArray(data)) {
                 setAllBookings(data);
-                // Filter pending bookings directly after fetching
-                setPendingBookings(data.filter(booking => booking.status === 'pending'));
+                // Apply initial filter after fetching
+                applyFilter(data, filterStatus);
             } else {
                 // If API returns non-array data, log and throw an error
                 console.error('API response for /api/admin/bookings is not an array:', data);
@@ -41,9 +41,18 @@ export default function AdminBookingsPage() {
             console.error('Error fetching bookings:', err);
             setError(err.message || 'เกิดข้อผิดพลาดในการโหลดข้อมูลการจอง');
             setAllBookings([]); // Ensure states are reset to empty arrays on error
-            setPendingBookings([]);
+            setFilteredBookings([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Helper function to apply filter
+    const applyFilter = (bookingsData, status) => {
+        if (status === 'all') {
+            setFilteredBookings(bookingsData);
+        } else {
+            setFilteredBookings(bookingsData.filter(booking => booking.status === status));
         }
     };
 
@@ -53,6 +62,12 @@ export default function AdminBookingsPage() {
             fetchBookings();
         }
     }, [sessionStatus]);
+
+    // Re-apply filter when filterStatus changes or allBookings changes
+    useEffect(() => {
+        applyFilter(allBookings, filterStatus);
+    }, [allBookings, filterStatus]);
+
 
     // Handle approving a booking
     const handleApprove = async (bookingId) => {
@@ -142,8 +157,6 @@ export default function AdminBookingsPage() {
     }
 
     return (
-        // เนื้อหาของหน้านี้จะถูกห่อหุ้มด้วย Layout ใน pages/_app.js อยู่แล้ว
-        // ดังนั้นไม่จำเป็นต้องใช้ <Layout> ที่นี่
         <div className="main-content-container p-6 bg-gray-100 dark:bg-gray-800 min-h-screen">
             <h1 className="page-title text-center mb-8">
                 <span className="bg-gradient-to-r from-purple-500 to-indigo-600 bg-clip-text text-transparent">
@@ -154,11 +167,43 @@ export default function AdminBookingsPage() {
             {error && <Alert type="error" message={error} dismissible onClose={() => setError(null)} />}
 
             <div className="mx-auto max-w-4xl">
-                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">รายการจองที่รอดำเนินการ</h2>
+                {/* Booking Management Menu (Filters) */}
+                <div className="bg-white dark:bg-gray-900 rounded-lg shadow-md p-6 mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">เมนูจัดการการจอง</h2>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setFilterStatus('all')}
+                            className={`px-4 py-2 rounded-md transition ${filterStatus === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'}`}
+                        >
+                            ทั้งหมด
+                        </button>
+                        <button
+                            onClick={() => setFilterStatus('pending')}
+                            className={`px-4 py-2 rounded-md transition ${filterStatus === 'pending' ? 'bg-yellow-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'}`}
+                        >
+                            รอดำเนินการ
+                        </button>
+                        <button
+                            onClick={() => setFilterStatus('approved')}
+                            className={`px-4 py-2 rounded-md transition ${filterStatus === 'approved' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'}`}
+                        >
+                            อนุมัติแล้ว
+                        </button>
+                        <button
+                            onClick={() => setFilterStatus('rejected')}
+                            className={`px-4 py-2 rounded-md transition ${filterStatus === 'rejected' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'}`}
+                        >
+                            ปฏิเสธแล้ว
+                        </button>
+                    </div>
+                </div>
+
+                {/* Booking List Table */}
+                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">รายการจอง ({filterStatus === 'all' ? 'ทั้งหมด' : filterStatus === 'pending' ? 'รอดำเนินการ' : filterStatus === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว'})</h2>
                 {loading ? (
                     <p className="text-center text-gray-500 dark:text-gray-400">กำลังโหลดข้อมูล...</p>
-                ) : pendingBookings.length === 0 ? (
-                    <p className="text-center text-gray-500 dark:text-gray-400">ไม่มีการจองที่รอดำเนินการ</p>
+                ) : filteredBookings.length === 0 ? (
+                    <p className="text-center text-gray-500 dark:text-gray-400">ไม่มีการจองในสถานะนี้</p>
                 ) : (
                     <div className="overflow-x-auto shadow-md rounded-lg">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -173,7 +218,7 @@ export default function AdminBookingsPage() {
                                 </tr>
                             </thead>
                             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                                {pendingBookings.map((booking) => (
+                                {filteredBookings.map((booking) => (
                                     <tr key={booking.id}>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                                             {booking.date} <br /> {booking.timeSlot?.time}

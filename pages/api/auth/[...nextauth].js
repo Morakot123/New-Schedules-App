@@ -1,40 +1,53 @@
-// pages/api/auth/[...nextauth].js
-import NextAuth from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
+// pages/api/auth/nextauth.js
+// This file should contain the full NextAuth configuration (authOptions) and handler.
 
-// Mock user data for demonstration purposes
-const users = [
-    { id: 1, name: 'Admin', email: 'admin@example.com', password: 'password', role: 'admin' },
-    { id: 2, name: 'User', name: 'ครูทดสอบ', email: 'user@example.com', password: 'password', role: 'teacher' },
-];
+import NextAuth from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+
+// Initialize PrismaClient outside the handler to avoid re-initialization on every request
+const prisma = new PrismaClient();
 
 export const authOptions = {
     providers: [
         CredentialsProvider({
-            name: 'Credentials',
+            name: "Credentials",
             credentials: {
-                email: { label: 'Email', type: 'text' },
-                password: { label: 'Password', type: 'password' },
+                email: { label: "Email", type: "email", placeholder: "test@example.com" },
+                password: { label: "Password", type: "password" }
             },
             async authorize(credentials, req) {
-                const user = users.find(u => u.email === credentials.email);
-
-                if (user && user.password === credentials.password) {
-                    // Return user object with role for session
-                    return {
-                        id: user.id,
-                        name: user.name,
-                        email: user.email,
-                        role: user.role, // Attach the role to the user object
-                    };
+                // Ensure credentials are provided
+                if (!credentials?.email || !credentials?.password) {
+                    throw new Error('กรุณากรอกอีเมลและรหัสผ่าน');
                 }
-                return null; // Return null if user not found or password incorrect
-            },
-        }),
+
+                const user = await prisma.user.findUnique({
+                    where: { email: credentials.email },
+                });
+
+                if (!user) { // User not found
+                    throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+                }
+
+                // Compare provided password with hashed password in DB
+                const isValidPassword = await bcrypt.compare(credentials.password, user.password);
+
+                if (!isValidPassword) { // Password mismatch
+                    throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+                }
+
+                // Return user object if authentication is successful
+                return {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                };
+            }
+        })
     ],
-    session: {
-        strategy: 'jwt',
-    },
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
@@ -43,14 +56,17 @@ export const authOptions = {
             return token;
         },
         async session({ session, token }) {
-            session.user.role = token.role;
+            if (token) {
+                session.user.role = token.role;
+            }
             return session;
-        },
+        }
     },
     secret: process.env.NEXTAUTH_SECRET,
     pages: {
-        signIn: '/login',
+        signIn: '/auth/login',
     },
+    debug: process.env.NODE_ENV === 'development',
 };
 
 export default NextAuth(authOptions);

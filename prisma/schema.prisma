@@ -76,7 +76,7 @@ model Teacher {
   userId    Int        @unique // Foreign key ที่เชื่อมโยงกับ User ที่ไม่ซ้ำกัน; รับประกัน User หนึ่งคนต่อโปรไฟล์ Teacher หนึ่งโปรไฟล์
   user      User       @relation("UserToTeacher", fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับโมเดล User; การลบแบบ Cascade
   schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่ครูสอน
-  bookings  Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking
+  bookings  Booking[]  // NEW: Back-relation for Booking model
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt // วันที่อัปเดตล่าสุด
 }
@@ -87,22 +87,20 @@ model Student {
   name        String
   userId      Int         @unique // Foreign key to User
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ User; การลบแบบ Cascade
-  classGroupId Int?       // Optional foreign key to a ClassGroup
-  classGroup  ClassGroup? @relation(fields: [classGroupId], references: [id]) // การเชื่อมโยงที่เป็นทางเลือกไปยัง ClassGroup
-  createdAt   DateTime    @default(now()) // วันที่สร้างบันทึกนักเรียน
-  updatedAt   DateTime    @updatedAt // วันที่อัปเดตล่าสุด
+  classGroupId Int?       // Optional foreign key to a ClassGroup.
+  classGroup  ClassGroup? @relation(fields: [classGroupId], references: [id]) // Optional link to a ClassGroup.
+  createdAt   DateTime    @default(now()) // Timestamp when the student record was created.
+  updatedAt   DateTime    @updatedAt // Added updatedAt field
 }
 
 // โมเดล Lab: แสดงถึงห้องปฏิบัติการ
 model Lab {
-  id          Int        @id @default(autoincrement())
-  name        String     @unique // ชื่อเฉพาะสำหรับแต่ละห้องปฏิบัติการ (เช่น "ห้องปฏิบัติการชีวะ")
-  roomNumber  String?    // หมายเลขห้อง (เช่น "301", "Lab A") - เป็นทางเลือก (optional)
-  capacity    Int?       // ความจุคนสูงสุด - เป็นทางเลือก (optional)
-  schedules   Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่จัดในห้องปฏิบัติการนี้
-  bookings    Booking[]  // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt // วันที่อัปเดตล่าสุด
+  id        Int        @id @default(autoincrement())
+  name      String     @unique // ชื่อเฉพาะสำหรับแต่ละห้องปฏิบัติการ
+  schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนที่จัดในห้องปฏิบัติการนี้
+  bookings  Booking[]  // NEW: Back-relation for Booking model
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt // Added updatedAt field
 }
 
 // โมเดล ClassGroup: แสดงถึงกลุ่มนักเรียน (เช่น ชั้นเรียน)
@@ -112,65 +110,65 @@ model ClassGroup {
   students  Student[]  // ความสัมพันธ์แบบ One-to-many กับนักเรียนในกลุ่มนี้
   schedules Schedule[] // ความสัมพันธ์แบบ One-to-many กับตารางเรียนสำหรับกลุ่มนี้
   createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt // วันที่อัปเดตล่าสุด
+  updatedAt DateTime   @updatedAt // Added updatedAt field
 }
 
-// โมเดล Grade: แสดงถึงระดับหรือชั้นเรียน (เช่น ม.1, ป.1)
+// NEW: Grade model: Represents a level or grade (e.g., ม.1, ป.1)
 model Grade {
   id        Int      @id @default(autoincrement()) // ใช้ Int @id @default(autoincrement()) เพื่อให้ตรงกับโมเดลอื่นๆ
   name      String   @unique // ชื่อระดับชั้น, ต้องไม่ซ้ำกัน (เช่น "ม.1")
-  bookings  Booking[] // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่เกี่ยวกับระดับชั้นนี้
+  bookings  Booking[] // NEW: Back-relation for Booking model
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// โมเดล TimeSlot: แสดงถึงช่วงเวลา (เช่น "09:00-10:00")
+// NEW: TimeSlot model: Represents a time slot (e.g., "09:00-10:00")
 model TimeSlot {
   id        Int      @id @default(autoincrement())
-  time      String   @unique // สตริงเวลา, เช่น "09:00-10:00"
-  bookings  Booking[] // ความสัมพันธ์ย้อนกลับสำหรับโมเดล Booking: การจองที่เกี่ยวกับช่วงเวลานี้
+  time      String   @unique // The time string, e.g., "09:00-10:00"
+  bookings  Booking[] // NEW: Back-relation for Booking model
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// โมเดล Booking: แสดงถึงการจองตารางเรียน
+// Booking model: Represents a class schedule booking.
 model Booking {
   id        Int      @id @default(autoincrement())
-  teacherId Int      // Foreign key ไปยัง Teacher
+  teacherId Int      // Foreign key to Teacher
   teacher   Teacher  @relation(fields: [teacherId], references: [id])
-  gradeId   Int      // Foreign key ไปยัง Grade
+  gradeId   Int      // Foreign key to Grade
   grade     Grade    @relation(fields: [gradeId], references: [id])
-  roomId    Int      // Foreign key ไปยัง Lab (ซึ่งใช้สำหรับ Rooms ของคุณ)
+  roomId    Int      // Foreign key to Lab (which you use for Rooms)
   room      Lab      @relation(fields: [roomId], references: [id])
-  timeSlotId Int     // Foreign key ไปยัง TimeSlot
+  timeSlotId Int     // Foreign key to TimeSlot
   timeSlot  TimeSlot @relation(fields: [timeSlotId], references: [id])
 
   date      String   // วันที่ของการจอง (เช่น "YYYY-MM-DD")
-  status    String   @default("pending") // สถานะการจอง เช่น "pending", "approved", "rejected"
+  status    String   @default("pending") // e.g., "pending", "approved", "rejected"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// โมเดล Schedule: แสดงถึงตารางเรียน (ดูเหมือนจะเป็นตารางเรียนแยกต่างหาก ไม่ใช่การจอง)
-// ความสัมพันธ์ทั้งหมด (teacher, lab, classGroup, user) จำเป็นสำหรับตารางเรียน
+// Schedule model: Represents a class schedule. (This seems to be a separate schedule, not booking)
+// All relations (teacher, lab, classGroup, user) are required for a schedule.
 model Schedule {
   id           Int        @id @default(autoincrement())
-  subject      String     // วิชาของตารางเรียน
-  time         String     // เวลาของตารางเรียน (ฟิลด์ 'time' นี้เป็นสตริงโดยตรง ไม่ใช่ foreign key ไปยังโมเดล TimeSlot)
-  day          String     // วันของตารางเรียน
+  subject      String     // Subject of the schedule.
+  time         String     // Time of the schedule. (This 'time' is a direct string, not a foreign key to TimeSlot model)
+  day          String     // Day of the schedule.
 
-  teacherId    Int        // Foreign key ไปยัง Teacher.
-  teacher      Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ Teacher; การลบแบบ Cascade.
+  teacherId    Int        // Foreign key to Teacher.
+  teacher      Teacher    @relation(fields: [teacherId], references: [id], onDelete: Cascade) // Links to Teacher; cascade delete.
 
-  labId        Int        // Foreign key ไปยัง Lab.
-  lab          Lab        @relation(fields: [labId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ Lab; การลบแบบ Cascade.
+  labId        Int        // Foreign key to Lab.
+  lab          Lab        @relation(fields: [labId], references: [id], onDelete: Cascade) // Links to Lab; cascade delete.
 
-  classGroupId Int        // Foreign key ไปยัง ClassGroup.
-  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ ClassGroup; การลบแบบ Cascade.
+  classGroupId Int        // Foreign key to ClassGroup.
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade) // Links to ClassGroup; cascade delete.
 
-  userId       Int        // Foreign key ไปยัง User (ผู้ใช้ที่สร้าง/เป็นเจ้าของตารางเรียนนี้).
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade) // เชื่อมโยงกับ User; การลบแบบ Cascade.
+  userId       Int        // Foreign key to User (the user who created/owns this schedule).
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade) // Links to User; cascade delete.
 
-  createdAt    DateTime   @default(now()) // วันที่สร้างตารางเรียน.
+  createdAt    DateTime   @default(now()) // Timestamp when the schedule was created.
 }
